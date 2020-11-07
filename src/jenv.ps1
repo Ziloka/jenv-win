@@ -4,12 +4,6 @@
 $availableReleasesURL = "https://api.adoptopenjdk.net/v3/info/available_releases";
 $ManagementFolder = [String]::Format("{0}\jenv", $env:APPDATA);
 
-# Check able to run script
-
-if((Get-ExecutionPolicy) -eq "Restricted"){
-    return cmd.exe .\jenv.bat;
-};
-
 if((Test-Path -Path $ManagementFolder) -eq $false){
     # [String]::Format("Could not find management directory`nCreating management directory at {0}`n`n", $ManagementFolder);
     New-Item -Path $ManagementFolder -ItemType "Directory" | Out-Null;
@@ -19,7 +13,13 @@ if((Test-Path -Path ([String]::Format("{0}/installers", $ManagementFolder))) -eq
     New-Item -Path ([String]::Format("{0}/installers", $ManagementFolder)) -ItemType "Directory" | Out-Null;
 };
 
-$arch = $env:PROCESSOR_ARCHITECTURE;
+if((Test-Path -Path ([String]::Format("{0}/config.json", $ManagementFolder))) -eq $false){
+    "{`"architectures`": {`"AMD64`": `"x64`"}}" | Out-File -Encoding "UTF8" -FilePath ([String]::Format("{0}/config.json", $ManagementFolder))
+    # New-Item -Path ([String]::Format("{0}/config.json", $ManagementFolder)) -ItemType "File" | Out-Null;
+}
+
+$config = ConvertFrom-Json -InputObject (Get-Content -Raw -Encoding "UTF8" -Path ([String]::Format("{0}\config.json", $ManagementFolder)));
+$arch = $config.architectures.($env:PROCESSOR_ARCHITECTURE);
 switch ($args[0]) {
     "help" {
         # Hard Coded for now will be dynamic soon
@@ -66,27 +66,44 @@ switch ($args[0]) {
             $installers = Get-ChildItem -Filter "*.msi" -LiteralPath ([String]::Format("{0}/installers", $ManagementFolder));
             if($installers.PSChildName.Contains([String]::Format("java{0}.msi", $args[1]))){
                 # Documentation on Adoptopenjdk MSI Installer Argument List
-                # https://adoptopenjdk.net/installation.html#installers
-                Start-Process msiexec.exe -Wait -ArgumentList ([String]::Format("/i {0}\installers\java{1}.msi ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome INSTALLDIR=`"{0}\v{1}\`" \quiet", $ManagementFolder, $args[1]))
+                # https://adoptopenjdk.net/installation.html#windows-msi
+                # Properly install something using msi executable application
+                # msiexec /i "<package>.msi" ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome
+                # Start-Process msiexec.exe -ArgumentList '/i "<package.msi>" ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome' -Verb RunAs
+                Start-Process msiexec.exe -Wait -ArgumentList ([String]::Format("/i `"{0}\installers\java{1}.msi`" ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome /qn", $ManagementFolder, $args[1])) -Verb RunAs;
                 [String]::Format("Now using java {0}", $args[1]);
+                # Refresh Current Terminal Session
+                Write-Output "Refreshing terminal...";
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User");
+                Write-Output "Finished refreshing terminal";
             } else {
                 [String]::Format("{0} is not on the file system. Run jenv list local to see what release versions you have installed");
             };
         } else {
-            Write-Host "Please specify a release version, run jenv list local to see what you installed onto your filesystem";
+            Write-Output "Please specify a release version, run jenv list local to see what you installed onto your filesystem";
         }
         break;
     };
     "uninstall" {
-        
         if($args[1]){
-
+            $installers = Get-ChildItem -Filter "*.msi" -LiteralPath ([String]::Format("{0}/installers", $ManagementFolder));
+            if($installers.PSChildName.Contains([String]::Format("java{0}.msi", $args[1]))){
+                Start-Process msiexec.exe -Wait -ArgumentList ([String]::Format("/x `"{0}\installers\java{1}.msi`" \qn", $ManagementFolder, $args[1])) -Verb RunAs
+                [String]::Format("Uninstalled java {0}",  $args[1]);
+            } else {
+                [String]::Format("{0} is not on the filesystem. Run jenv list local to see what release versions you have installed");
+            }
         } else {
-
+            Write-Output "Please specify a release version to uninstall, run jenv list local to see what you installed onto your filesystem";
         };
         break;
     };
+    "refreshenv" {
+        Write-Output "Refreshing terminal...";
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User");
+        Write-Output "Finished refreshing terminal";
+    };
     Default {
-        "Invalid Command. Run jenv commands to see what commands there are"
+        "Invalid Command. Run jenv commands to see what commands there are";
     };
 };
