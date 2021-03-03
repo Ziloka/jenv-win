@@ -1,4 +1,4 @@
-function FunctionName ($MngmntFol) {
+function uninstall ($MngmntFol) {
     
     if($args[1]){
         $installers = Get-ChildItem -Filter "*.msi" -LiteralPath "$MngmtFol\installers";

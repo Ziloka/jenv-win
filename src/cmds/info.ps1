@@ -1,4 +1,4 @@
-function info ($arch) {
+function info($arch) {
 
     Write-Output "
 Arch: $arch
